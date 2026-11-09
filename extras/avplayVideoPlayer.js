@@ -28,6 +28,41 @@ function _AvplayVideoPlayer(modules) {
 
     this._currentPlayOptions = {};
     this._currentTrackOffset = 0;
+    this._currentAspectRatio = 'auto';
+
+    // jellyfin-web drives a player's aspect ratio through these three methods.
+    // AVPlay has no crop/cover display method, so we expose only the two modes
+    // it supports and map them to its display methods, defaulting to a
+    // letterbox fit so non-16:9 video is never stretched to fill the screen.
+    var AVPLAY_DISPLAY_MODE = {
+        auto: 'PLAYER_DISPLAY_MODE_LETTER_BOX',
+        fill: 'PLAYER_DISPLAY_MODE_FULL_SCREEN'
+    };
+
+    this.getSupportedAspectRatios = function () {
+        return [
+            { name: 'Auto', id: 'auto' },
+            { name: 'Fill', id: 'fill' }
+        ];
+    };
+
+    this.getAspectRatio = function () {
+        return this._currentAspectRatio || 'auto';
+    };
+
+    this.setAspectRatio = function (val) {
+        this._currentAspectRatio = AVPLAY_DISPLAY_MODE[val] ? val : 'auto';
+        this.applyAspectRatio();
+    };
+
+    this.applyAspectRatio = function () {
+        var mode = AVPLAY_DISPLAY_MODE[this._currentAspectRatio] || AVPLAY_DISPLAY_MODE.auto;
+        try {
+            webapis.avplay.setDisplayMethod(mode);
+        } catch (err) {
+            console.debug('AVPlay setDisplayMethod failed', err);
+        }
+    };
 
     this.canPlayMediaType = function (mediaType) {
         return (mediaType || '').toLowerCase() === 'video';
@@ -622,6 +657,7 @@ function _AvplayVideoPlayer(modules) {
             webapis.avplay.setListener(listener);
 
             webapis.avplay.setDisplayRect(elem.offsetLeft, elem.offsetTop, elem.offsetWidth, elem.offsetHeight);
+            self.applyAspectRatio();
 
             webapis.avplay.prepareAsync(resolve, reject);
         });
